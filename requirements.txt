@@ -1,0 +1,16 @@
+fastapi>=0.110
+uvicorn>=0.29
+pydantic>=2.6
+pandas
+numpy
+scipy
+plotly
+mlflow
+autogluon.tabular
+autogluon.timeseries
+torch
+scikit-learn
+streamlit
+requests
+networkx
+pyvis
