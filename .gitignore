@@ -1,0 +1,21 @@
+# Ignore ML artifacts and large autoML outputs
+AutogluonModels/
+mlruns/0/
+# optionally ignore entire mlruns directory
+# mlruns/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+
+# Virtual envs
+venv/
+.env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
