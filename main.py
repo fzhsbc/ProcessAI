@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends
 from fastapi.responses import HTMLResponse # 引入 HTMLResponse
 from app.core.auth import api_token_auth
-from app.routers import train, models, visualization, llm
+from app.routers import train, models, visualization, llm, deploy, knowledge
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -27,6 +27,8 @@ app.include_router(train.router, dependencies=[Depends(api_token_auth)])
 app.include_router(models.router, dependencies=[Depends(api_token_auth)])
 app.include_router(visualization.router, dependencies=[Depends(api_token_auth)])
 app.include_router(llm.router, dependencies=[Depends(api_token_auth)])
+app.include_router(deploy.router, dependencies=[Depends(api_token_auth)])
+app.include_router(knowledge.router, dependencies=[Depends(api_token_auth)])
 
 if __name__ == "__main__":
     import uvicorn

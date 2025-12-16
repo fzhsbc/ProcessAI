@@ -6,6 +6,8 @@ import mlflow
 from autogluon.tabular import TabularPredictor
 from app.services.feature.curve_extractor import CurveFeatureExtractor
 from app.models.task_config import TabularConfig
+from app.services.registry.model_registry import register_model
+import logging
 
 
 class TrainingService:
@@ -57,4 +59,24 @@ class TrainingService:
                 artifact_path="model"
             )
 
-            return mlflow.active_run().info.run_id
+            run_id = mlflow.active_run().info.run_id
+            # Prefer to register the MLflow artifact URI (local file path) so
+            # that downloads point to the actual stored artifacts.
+            try:
+                # this returns an artifact URI like file:///abs/path/mlruns/.../artifacts/model
+                artifact_uri = mlflow.get_artifact_uri("model")
+                if artifact_uri.startswith("file://"):
+                    artifact_path = artifact_uri[len("file://"):]
+                else:
+                    artifact_path = os.path.abspath(model_dir)
+            except Exception:
+                artifact_path = os.path.abspath(model_dir)
+
+            # register the saved artifact path in the simple registry
+            try:
+                register_model(run_id, artifact_path, metadata={"label": label})
+            except Exception:
+                # registry failures shouldn't break training result delivery
+                logging.exception("Failed to register model %s in registry", run_id)
+
+            return run_id

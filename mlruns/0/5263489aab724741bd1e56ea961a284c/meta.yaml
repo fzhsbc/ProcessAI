@@ -1,0 +1,15 @@
+artifact_uri: file:///mlm/AID_plat/mlruns/0/5263489aab724741bd1e56ea961a284c/artifacts
+end_time: 1765872812148
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 5263489aab724741bd1e56ea961a284c
+run_name: tabular-train-12b42acb
+run_uuid: 5263489aab724741bd1e56ea961a284c
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1765872802517
+status: 4
+tags: []
+user_id: fangzhenghao
