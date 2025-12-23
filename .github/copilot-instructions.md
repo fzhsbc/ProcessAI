@@ -1,57 +1,52 @@
 <!-- Copilot instructions for ProcessAI (AID_plat) -->
-# ProcessAI — Copilot Instructions
+# ProcessAI — Copilot Instructions (condensed, repo-specific)
 
-Purpose: give an AI coding agent the minimal, repository-specific knowledge
-needed to be productive. Focus on architecture, conventions, run commands,
-and small concrete examples.
+Purpose: minimal, practical guidance to be productive in this repo:
+architecture, dev workflows, conventions, and copy-paste examples.
 
-1) Big picture
-- Backend: a FastAPI service started from `main.py`. Routes live under
-  `app/routers/*` and are registered in `main.py` (each router exposes a
-  `router` object). Authentication is applied via `Depends(api_token_auth)`
-  from `app.core.auth`.
-- Core: `app/core` contains configuration and enums (`config.py`, `enums.py`) used
-  across the project.
-- Models: Pydantic schemas and base predictor abstraction live in `app/models`.
-  See `predictor_base.py` (defines `BasePredictor`) and `task_config.py`.
-- Services: `app/services` implements feature extraction, predictors, training,
-  registry, knowledge graph, and visualization. Predictor implementations are
-  under `app/services/predictors` and are instantiated via
-  `app/services/predictors/factory.py`.
-- Deployment: `app/deploy/Dockerfile` and `app/deploy/kserve_inference.py` hold
-  deploy-time integration code.
+Big picture
+- FastAPI app entry: [main.py](main.py). Routers live under [app/routers/](app/routers) and are mounted from `main.py` (each module exposes a `router`). Protected routes use the auth dependency `app.core.auth.api_token_auth`.
+- ML logic: predictor interfaces and configs live in [app/models](app/models) and implementations under [app/services/predictors](app/services/predictors). Predictor instances are created via the factory at [app/services/predictors/factory.py](app/services/predictors/factory.py).
+- Artifacts & deployment: model artifacts are written to `mlruns/` (MLflow layout) and a top-level `model_registry.json` tracks registry metadata. Production inference uses [app/deploy/kserve_inference.py](app/deploy/kserve_inference.py) and the Dockerfile at [app/deploy/Dockerfile](app/deploy/Dockerfile).
 
-2) Run & build (what actually works from inspected files)
-- Install deps: `pip install -r requirements.txt` (project uses `python-dotenv`)
-- Run locally (dev):
-  - `uvicorn main:app --reload --host 0.0.0.0 --port 8000`
-  - or `python main.py` (main uses `uvicorn.run()` when invoked directly).
-- Docker: the `app/deploy/Dockerfile` is the single Dockerfile in the repo —
-  use it to build an image for serving.
+Quick commands (local)
+- Install deps: `pip install -r requirements.txt`.
+- Run dev server: `python main.py` or `uvicorn main:app --reload --host 0.0.0.0 --port 8000`.
+- Produce example model artifacts: `python scripts/run_sample_training.py` (writes under `mlruns/` and updates `model_registry.json`).
 
-3) Project conventions & patterns (explicit, discoverable)
-- Routers: files under `app/routers` export a `router = APIRouter(...)` and are
-  included in `main.py`. When adding endpoints, follow existing files like
-  `app/routers/train.py`.
-- Auth: request-level authentication is applied using `app.core.auth.api_token_auth`.
-  New endpoints should accept the same dependency for consistency.
-- Predictors: extend `BasePredictor` in `app/models/predictor_base.py` and
-  implement `train`, `predict`, `save`, and `load`. Register new predictor
-  classes in `app/services/predictors/factory.py` where factory lookup occurs.
-  Example:
+Key repo conventions (practical)
+- Routers: each module in `app/routers/` defines `router = APIRouter(...)` and is included by `main.py`. Avoid changing the router-loading approach—add new routers instead.
+- Auth: use `app.core.auth.api_token_auth` for endpoint protection; many routers include it as a route-level dependency in `main.py`.
+- Predictors: implement `BasePredictor` (`app/models/predictor_base.py`) methods: `train(data, config)`, `predict(data)`, `save(path)`, `@classmethod load(path)`. Register new predictor classes in [app/services/predictors/factory.py](app/services/predictors/factory.py).
+- Configs: task configs use discriminated unions in [app/models/task_config.py](app/models/task_config.py) (Field discriminator `task_type`). Follow this pattern when adding task-specific config variants.
 
+Integration & compatibility rules
+- Serialization compatibility: if you change predictor save/load serialization, update [app/deploy/kserve_inference.py](app/deploy/kserve_inference.py) and ensure `scripts/run_sample_training.py` still produces compatible artifacts.
+- MLflow artifacts: assume `mlruns/` is the authoritative run/artifact location. New training routines should place artifacts under an `artifacts/model/` path consistent with existing runs.
+- Registry: update `model_registry.json` only via provided scripts or with careful migration; other components rely on its shape.
+
+Notable files to inspect (start here)
+- [main.py](main.py)
+- [app/routers/train.py](app/routers/train.py) and other modules in [app/routers/](app/routers)
+- [app/models/predictor_base.py](app/models/predictor_base.py), [app/models/task_config.py](app/models/task_config.py)
+- [app/services/predictors/factory.py](app/services/predictors/factory.py)
+- [app/deploy/kserve_inference.py](app/deploy/kserve_inference.py)
+- [scripts/run_sample_training.py](scripts/run_sample_training.py)
+
+Quick copy-paste predictor skeleton
 ```python
 from app.models.predictor_base import BasePredictor
 
 class MyPredictor(BasePredictor):
     def train(self, data, config):
-        # implement training
-        return
+        # save artifacts to path provided by training service
+        return {"meta": "ok"}
 
     def predict(self, data):
-        return []
+        return [0 for _ in data]
 
     def save(self, path: str):
+        # write model files under `path`
         pass
 
     @classmethod
@@ -59,38 +54,89 @@ class MyPredictor(BasePredictor):
         return cls()
 ```
 
-- Pydantic & configs: `app/models/task_config.py` uses a discriminated union
-  pattern (`Field(discriminator='task_type')`) — follow that approach when adding
-  configuration models.
+Actionable rules for an AI coding agent
+- When adding a predictor: implement `BasePredictor` methods and register the class in [app/services/predictors/factory.py](app/services/predictors/factory.py).
+- Prefer adding routers to `app/routers/` instead of altering `main.py` router-loading.
+- Update `app/deploy/kserve_inference.py` for any serialization or loading changes to keep deploy compatibility.
+- Use `scripts/run_sample_training.py` to validate that a new predictor produces the expected MLflow layout in `mlruns/`.
 
-4) Integration points & external dependencies
-- `requirements.txt` lists runtime libs (FastAPI, uvicorn, pydantic, python-dotenv).
-- `app/deploy/kserve_inference.py` is the likely integration point for model
-  serving — changes to model save/load format should keep this file in mind.
-- Knowledge graph code lives under `app/services/knowledge` and uses a local
-  storage abstraction in `storage.py` — treat it as a single component when
-  changing graph persistence.
+If anything here is unclear or you want a full example (predictor + registration + run script + test), I can add it—tell me which predictor type to target.
+<!-- Copilot instructions for ProcessAI (AID_plat) -->
+# ProcessAI — Copilot Instructions (condensed)
 
-5) What an AI assistant should do (actionable rules)
-- When adding a new predictor: implement `BasePredictor` methods, add tests,
-  and register the class in the `factory.py` so it becomes discoverable.
-- Avoid changing global `main.py` behavior — prefer adding routers and
-  including them in `main.py` the same way existing routers are included.
-- Keep imports explicit and prefer package-level exports (see updated
-  `app/models/__init__.py`, `app/services/__init__.py`, `app/core/__init__.py`).
+Purpose: provide the minimal, repo-specific knowledge an AI coding agent
+needs to be productive here: architecture, run commands, conventions, and
+small copy-paste examples.
 
-6) Key files to inspect for context
-- `main.py` — app entrypoint and router registration
-- `app/routers/*` — API endpoints
-- `app/core/config.py`, `app/core/auth.py`, `app/core/enums.py` — shared core
-- `app/models/predictor_base.py`, `app/models/task_config.py`, `app/models/schema.py`
-- `app/services/predictors/factory.py` — predictor registration
-- `app/deploy/Dockerfile`, `app/deploy/kserve_inference.py` — deploy
+Big picture
+- FastAPI backend launched from `main.py`. Routers live in `app/routers/*`
+  and are included in `main.py` (each exposes `router`). All API routes are
+  mounted with the auth dependency `app.core.auth.api_token_auth`.
+- Predictors & ML logic live under `app/models` and `app/services`. Predictor
+  implementations are in `app/services/predictors` and instantiated via the
+  factory at `app/services/predictors/factory.py`.
+- Model serving integration lives in `app/deploy` (see `kserve_inference.py`).
 
-7) When in doubt
-- Follow existing file structure and small-file patterns. If you need to
-  change serialization or contract between predictor save/load and deploy code,
-  update both `predictor` implementations and `app/deploy/kserve_inference.py`.
+How to run locally (quick)
+- Install deps: `pip install -r requirements.txt`.
+- Start dev server: `python main.py` or
+  `uvicorn main:app --reload --host 0.0.0.0 --port 8000`.
+- Produce sample artifacts: run `scripts/run_sample_training.py` (creates
+  artifacts under `mlruns/` and `model_registry.json`).
 
-If anything here is unclear or you want more examples (e.g. a full example
-predictor plus registration & a minimal test), tell me which part to expand.
+Conventions & patterns (practical)
+- Routers: define `router = APIRouter(...)` and include route-level
+  dependencies via `app.include_router(..., dependencies=[Depends(api_token_auth)])`.
+- Auth: always use `app.core.auth.api_token_auth` for protected endpoints.
+- Predictors: subclass `BasePredictor` (`app/models/predictor_base.py`) and
+  implement `train(data, config)`, `predict(data)`, `save(path)`, `load(path)`.
+  Register new predictors in `app/services/predictors/factory.py`.
+- Configs: `app/models/task_config.py` uses a discriminated union
+  (`Field(discriminator='task_type')`) — follow this for task-specific configs.
+
+Integration points & artifacts
+- MLflow outputs: `mlruns/` contains runs and artifacts; registry file is
+  `model_registry.json` at repo root.
+- Deployment: `app/deploy/Dockerfile` and `app/deploy/kserve_inference.py` —
+  keep save/load compatibility between predictors and `kserve_inference.py`.
+- Knowledge graph: `app/services/knowledge` with `storage.py` for persistence.
+
+Practical examples
+- Minimal predictor skeleton to copy/paste into `app/services/predictors`:
+
+```python
+from app.models.predictor_base import BasePredictor
+
+class MyPredictor(BasePredictor):
+    def train(self, data, config):
+        # return trained model metadata or save artifacts
+        return
+
+    def predict(self, data):
+        return [0] * len(data)
+
+    def save(self, path: str):
+        # persist model artifacts
+        pass
+
+    @classmethod
+    def load(cls, path: str):
+        return cls()
+```
+
+Files to inspect first
+- `main.py` — app entry and router mounting
+- `app/routers/*` — endpoints (train, models, visualization, llm, deploy, knowledge)
+- `app/models/predictor_base.py`, `app/models/task_config.py`
+- `app/services/predictors/factory.py` — add new predictors here
+- `scripts/run_sample_training.py` — runnable example producing model artifacts
+
+What an AI assistant should do (actionable rules)
+- When adding a predictor: implement `BasePredictor` methods and register it
+  in `app/services/predictors/factory.py`.
+- Avoid changing `main.py` router-loading behavior; add routers instead.
+- If changing model serialization, update `app/deploy/kserve_inference.py` and
+  ensure `scripts/run_sample_training.py` still produces compatible artifacts.
+
+If anything here is unclear or you want me to expand with a full example
+predictor + test, say so and I will add the code and a quick run script.

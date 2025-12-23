@@ -3,7 +3,11 @@ import uuid
 import pandas as pd
 import mlflow
 # 已移除: import mlflow.autogluon
-from autogluon.tabular import TabularPredictor
+try:
+    from autogluon.tabular import TabularPredictor
+except Exception:  # pragma: no cover - autogluon may not be installed
+    TabularPredictor = None
+from app.services.predictors.simple_tabular import SimpleTabularPredictor
 from app.services.feature.curve_extractor import CurveFeatureExtractor
 from app.models.task_config import TabularConfig
 from app.services.registry.model_registry import register_model
@@ -39,21 +43,34 @@ class TrainingService:
                 "time_limit": config.time_limit,
             })
 
-            predictor = TabularPredictor(label=label)
-            predictor.fit(
-                train_df,
-                presets=config.presets,
-                time_limit=config.time_limit,
-            )
+            if TabularPredictor is not None:
+                predictor = TabularPredictor(label=label)
+                predictor.fit(
+                    train_df,
+                    presets=config.presets,
+                    time_limit=config.time_limit,
+                )
 
-            leaderboard = predictor.leaderboard(silent=True)
-            best_row = leaderboard.iloc[0].to_dict()
+                leaderboard = predictor.leaderboard(silent=True)
+                best_row = leaderboard.iloc[0].to_dict()
 
-            for k, v in best_row.items():
-                if isinstance(v, (int, float)):
-                    mlflow.log_metric(k, float(v))
-            model_dir = os.path.abspath("./artifacts/autogluon")
-            predictor.save(model_dir)
+                for k, v in best_row.items():
+                    if isinstance(v, (int, float)):
+                        mlflow.log_metric(k, float(v))
+                model_dir = os.path.abspath("./artifacts/autogluon")
+                predictor.save(model_dir)
+            else:
+                # Fallback lightweight trainer for MVP when AutoGluon isn't installed
+                from types import SimpleNamespace
+
+                cfg = SimpleNamespace(label=label, presets=getattr(config, "presets", None), time_limit=getattr(config, "time_limit", None))
+                predictor = SimpleTabularPredictor()
+                predictor.train(train_df.assign(**{label: train_df[label]}), cfg)
+                model_dir = os.path.abspath("./artifacts/simple")
+                # Save to a single file path under model_dir
+                os.makedirs(model_dir, exist_ok=True)
+                save_path = os.path.join(model_dir, "simple_model.npz")
+                predictor.save(save_path)
             mlflow.log_artifacts(
                 local_dir=model_dir,
                 artifact_path="model"

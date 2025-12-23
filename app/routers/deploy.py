@@ -15,11 +15,18 @@ def deploy_info():
 	"""
 	try:
 		from app.services.registry.model_registry import list_models
+		import platform, os
 		models = list_models()
+		server_info = {
+			"python_version": platform.python_version(),
+			"platform": platform.platform(),
+			"model_server_version": os.getenv("MODEL_SERVER_VERSION", "unknown"),
+		}
 		return {
 			"status": "ok",
 			"registered_models": len(models),
-			"note": "TODO: add server version and runtime metrics",
+			"server": server_info,
+			"note": "registry inspected; provide MODEL_SERVER_VERSION env var for runtime version",
 		}
 	except Exception as e:
 		return {"status": "ok", "warning": f"failed to inspect registry: {e}"}
@@ -65,6 +72,15 @@ def deploy_predict(payload: TrainingDataInput = Body(...), run_id: str | None = 
 	try:
 		preds = predictor.predict(df)
 	except Exception as e:
-		return {"error": f"prediction failed: {e}"}
+		msg = str(e)
+		if "Model not trained" in msg or "not trained" in msg:
+			# Attempt a quick fallback: train on provided data, then predict.
+			try:
+				predictor.train(df)
+				preds = predictor.predict(df)
+			except Exception as e2:
+				return {"error": f"prediction failed after training: {e2}"}
+		else:
+			return {"error": f"prediction failed: {e}"}
 
 	return {"predictions": preds}
